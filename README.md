@@ -14,6 +14,7 @@ This project analyzes New York City car crash data to identify key risk factors 
 - Linear Regression
 - Random Forest + GridSearch
 - ARIMA / SARIMA (time series forecasting)
+- SQL LITE
 
 ## 🛠️ Tech Stack
 - Python (pandas, numpy, scikit-learn, statsmodels)
@@ -26,7 +27,8 @@ This project analyzes New York City car crash data to identify key risk factors 
 - `linear_reg.ipynb` → Regression modeling  
 - `rf_model.ipynb` → Random Forest and hyperparameter tuning  
 - `arima.ipynb` / `sarima.ipynb` → Time series modeling  
-- `time_series.ipynb` → Trend and seasonal analysis  
+- `time_series.ipynb` → Trend and seasonal analysis
+- data/processed → SQL
 
 ## 📈 Key Insights
 - Crash frequency varies significantly by borough and time of day  
