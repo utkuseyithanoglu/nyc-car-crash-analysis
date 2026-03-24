@@ -160,7 +160,7 @@ if selected == "AI ASSISTANT":
     def load_all_models():
         base_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(base_dir)
-        models_dir = os.path.join(project_root, "models")
+        models_dir = os.path.join(project_root,"..", "models")
 
         logreg_path = os.path.join(models_dir, "logreg_model.pkl")
         grid_path = os.path.join(models_dir, "gridsearch_crash_model.pkl")
