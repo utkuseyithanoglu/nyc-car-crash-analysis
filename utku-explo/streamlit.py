@@ -159,8 +159,8 @@ if selected == "AI ASSISTANT":
     @st.cache_resource
     def load_all_models():
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(base_dir)
-        models_dir = os.path.join(project_root,"..", "models")
+        project_root = os.path.abspath(os.path.join(base_dir, ".."))
+        models_dir = os.path.join(project_root, "models")
 
         logreg_path = os.path.join(models_dir, "logreg_model.pkl")
         grid_path = os.path.join(models_dir, "gridsearch_crash_model.pkl")
@@ -181,10 +181,9 @@ if selected == "AI ASSISTANT":
             model_features = pickle.load(f)
 
         with open(data_path, "rb") as f:
-            main_df = pickle.load(f)
+            clean_data = pickle.load(f)
 
-        return logreg_bundle, gridsearch_model, sarimax_model, model_features, main_df
-
+        return logreg_bundle, gridsearch_model, sarimax_model, model_features, clean_data
     try:
         logreg_bundle, gridsearch_model, sarimax_model, model_features, main_df = load_all_models()
     except Exception as e:
