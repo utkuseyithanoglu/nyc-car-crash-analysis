@@ -159,12 +159,14 @@ if selected == "AI ASSISTANT":
     @st.cache_resource
     def load_all_models():
         base_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(base_dir)
+        models_dir = os.path.join(project_root, "models")
 
-        logreg_path = os.path.join(base_dir, "logreg_model.pkl")
-        grid_path = os.path.join(base_dir, "gridsearch_crash_model.pkl")
-        sarimax_path = os.path.join(base_dir, "sarimax_model.pkl")
-        features_path = os.path.join(base_dir, "model_features.pkl")
-        data_path = os.path.join(base_dir, "clean_crash_data.pkl")
+        logreg_path = os.path.join(models_dir, "logreg_model.pkl")
+        grid_path = os.path.join(models_dir, "gridsearch_crash_model.pkl")
+        sarimax_path = os.path.join(models_dir, "sarimax_model.pkl")
+        features_path = os.path.join(models_dir, "model_features.pkl")
+        data_path = os.path.join(models_dir, "clean_crash_data.pkl")
 
         with open(logreg_path, "rb") as f:
             logreg_bundle = pickle.load(f)
