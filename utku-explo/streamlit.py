@@ -9,10 +9,9 @@ from dotenv import load_dotenv
 import streamlit as st
 from streamlit_option_menu import option_menu
 
+st.set_page_config(page_title="NYC CAR Crash Analaysis + Chatbot", page_icon="🚨", layout="wide")
 st.title("NYC Car Crash Analysis Dashboard")
 st.markdown("Explore crash trends, injuries, borough hotspots, and risk patterns across New York City.")
-
-st.set_page_config(page_title="NYC CAR Crash Analaysis + Chatbot", page_icon="🚨", layout="wide")
 selected = option_menu(
     menu_title=None,
     options=["Dashboard", "AI ASSISTANT"],
@@ -143,6 +142,7 @@ if selected == "AI ASSISTANT":
     st.title("🛞 NYC CAR CRASH Assistant")
     st.caption("Powered by Logistic Regression + GridSearch + SARIMAX | NYC Crash Data | Built by Utku Seyithanoğlu")
     st.caption("Thanks to Ayman Tabidi and Sarah Oasier for their support.")
+    
 
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
