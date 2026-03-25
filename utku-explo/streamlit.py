@@ -1,21 +1,69 @@
 import os
-import pickle 
+import re
 import json
 import pandas as pd
-import matplotlib.pyplot as plt
-import calendar
-from openai import OpenAI
-from dotenv import load_dotenv
 import streamlit as st
 from streamlit_option_menu import option_menu
+from openai import OpenAI
+from dotenv import load_dotenv
 
-st.set_page_config(page_title="NYC CAR Crash Analaysis + Chatbot", page_icon="🚨", layout="wide")
+def detect_language(text: str) -> str:
+    text = text.lower().strip()
+
+    turkish_keywords = [
+        "ve", "mi", "mu", "mı", "nasıl", "neden", "kaç", "saat",
+        "tahmin", "karşılaştır", "yaralanma", "ilçe", "bölge", "merhaba", "selam"
+    ]
+
+    english_keywords = [
+        "forecast", "compare", "injury", "risk", "hour", "hello", "hi", "borough"
+    ]
+
+    tr_score = sum(1 for word in turkish_keywords if word in text)
+    en_score = sum(1 for word in english_keywords if word in text)
+
+    if tr_score >= en_score and tr_score > 0:
+        return "tr"
+    return "en"
+
+
+def translate_response(text: str, lang: str) -> str:
+    if lang == "tr":
+        return (
+            text
+            .replace("Forecast for next", "Önümüzdeki")
+            .replace("hours", "saat için tahmin")
+            .replace("Average predicted crashes", "Ortalama tahmini kaza")
+            .replace("Peak predicted crashes", "En yüksek tahmini kaza")
+            .replace("Lowest predicted crashes", "En düşük tahmini kaza")
+            .replace("First values", "İlk değerler")
+            .replace("Borough Comparison", "Bölge Karşılaştırması")
+            .replace("Highest injury rate", "En yüksek yaralanma oranı")
+            .replace("Lowest injury rate", "En düşük yaralanma oranı")
+            .replace("Most crashes", "En fazla kaza")
+            .replace("Prediction", "Tahmin")
+            .replace("High injury risk", "Yüksek risk")
+            .replace("Lower injury risk", "Düşük risk")
+            .replace("I can help with", "Şunlarda yardımcı olabilirim")
+        )
+    return text
+
+# -----------------------------------
+# PAGE CONFIG
+# -----------------------------------
+st.set_page_config(
+    page_title="NYC Car Crash Analysis + Chatbot",
+    page_icon="🚨",
+    layout="wide"
+)
+
 st.title("NYC Car Crash Analysis Dashboard")
 st.markdown("Explore crash trends, injuries, borough hotspots, and risk patterns across New York City.")
+
 selected = option_menu(
     menu_title=None,
-    options=["Dashboard", "AI ASSISTANT"],
-    icons=["map", "chat"],
+    options=["Dashboard", "AI Assistant"],
+    icons=["bar-chart", "chat-dots"],
     orientation="horizontal",
     styles={
         "container": {
@@ -38,535 +86,765 @@ selected = option_menu(
         },
     }
 )
-if selected == "Dashboard":
 
-    col1, col2, col3 = st.columns(3)
+# -----------------------------------
+# HELPERS
+# -----------------------------------
+BOROUGHS = ["BROOKLYN", "QUEENS", "MANHATTAN", "BRONX", "STATEN ISLAND"]
 
-    col1.metric("Total Crashes", "1,554,600")
-    col2.metric("Avg Injury Rate", "31.88%")
-    col3.metric("Most Risky Borough", "Brooklyn")
-    
-    
-    st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #1f2937, #374151);
-            padding: 32px;
-            border-radius: 16px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        ">
-            <h1 style="
-                color: white;
-                text-align: center;
-                margin-bottom: 10px;
-                font-size: 42px;
-            ">
-                🚗 OVERVIEW
-            </h1>
-            <p style="
-                color: #e5e7eb;
-                text-align: center;
-                font-size: 18px;
-                margin-bottom: 0;
-            ">
-                 This dashboard explores crash trends, injury risk, EMS demand patterns, and borough-level hotspots across New York City.
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-        <div style="
-            background: linear-gradient(135deg, #1f2937, #374151);
-            padding: 32px;
-            border-radius: 16px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        ">
-            <h1 style="
-                color: white;
-                text-align: center;
-                margin-bottom: 10px;
-                font-size: 42px;
-            ">
-                🚨 purpose of the project
-            </h1>
-            <p style="
-                color: #e5e7eb;
-                text-align: center;
-                font-size: 18px;
-                margin-bottom: 0;
-            ">
-                This project explores NYC crash data to uncover key trends and risk patterns.
-It uses data analysis and visualization to provide actionable insights for safer urban planning
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-<p style='text-align: center; font-size:17px; color:#888;'>
-Data source:
-<a href='https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95/about_data' target='_blank'>
-Motor Vehicle Collisions – Crashes (NYC Open Data)
-</a>
-</p>
-""", unsafe_allow_html=True)
-    st.divider()
-    
-    st.markdown("### 🌎 NYC Traffic Crash Distribution by Borough")
-
-    hour_url = "https://public.tableau.com/views/NYCTrafficcrashdisturabitionbyborough/Sheet1?:embed=true&:showVizHome=no"
-
-    st.components.v1.iframe(hour_url, height=800, scrolling=True)
-    st.markdown("""
-    **Insight:** Crash risk is highest in Brooklyn and Queens        
-    """)
-    st.divider()
-
-    st.markdown("### 🆚 Actual vs Predicted EMS Calls Daily Aggregation")
-
-    sarima_url = "https://public.tableau.com/views/nyccarcrashsarima/Dashboard1?:embed=true&:showVizHome=no"
-
-    st.components.v1.iframe(sarima_url, height=800, scrolling=True)
-    st.markdown("""
-    **Insight:** There are similar crash patterns every day.        
-    """)
-
-    st.divider()
-
-    st.markdown("### 🆚 Predicted vs Actual injury rate by borough")
-
-    sarima_url = "https://public.tableau.com/views/modelperformancepredictvsactualinjuryratebyborough/Dashboard2?:showVizHome=no"
-
-    st.components.v1.iframe(sarima_url, height=800, scrolling=True)
-    st.markdown("**Insight:** The predicted injury rate is close to the actual rate in most boroughs.")
-
-if selected == "AI ASSISTANT":
-    st.title("🛞 NYC CAR CRASH Assistant")
-    st.caption("Powered by Logistic Regression + GridSearch + SARIMAX | NYC Crash Data | Built by Utku Seyithanoğlu")
-    st.caption("Thanks to Ayman Tabidi and Sarah Oasier for their support.")
-    
-
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-
-    if not api_key:
-        st.error("OPENAI_API_KEY not found. Please add it to your .env file.")
-        st.stop()
-
-    client = OpenAI(api_key=api_key)
-
-    # ----------------------------
-    # LOAD MODELS / DATA
-    # ----------------------------
-    @st.cache_resource
-    def load_all_models():
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.abspath(os.path.join(base_dir, ".."))
-        models_dir = os.path.join(project_root, "models")
-
-        logreg_path = os.path.join(models_dir, "logreg_model.pkl")
-        grid_path = os.path.join(models_dir, "gridsearch_crash_model.pkl")
-        sarimax_path = os.path.join(models_dir, "sarimax_model.pkl")
-        features_path = os.path.join(models_dir, "model_features.pkl")
-        data_path = os.path.join(models_dir, "clean_crash_data.pkl")
-
-        with open(logreg_path, "rb") as f:
-            logreg_bundle = pickle.load(f)
-
-        with open(grid_path, "rb") as f:
-            gridsearch_model = pickle.load(f)
-
-        with open(sarimax_path, "rb") as f:
-            sarimax_model = pickle.load(f)
-
-        with open(features_path, "rb") as f:
-            model_features = pickle.load(f)
-
-        with open(data_path, "rb") as f:
-            clean_data = pickle.load(f)
-
-        return logreg_bundle, gridsearch_model, sarimax_model, model_features, clean_data
+def safe_read_csv(path: str) -> pd.DataFrame:
+    if not os.path.exists(path):
+        return pd.DataFrame()
     try:
-        logreg_bundle, gridsearch_model, sarimax_model, model_features, main_df = load_all_models()
-    except Exception as e:
-        st.error(f"Model/data loading error: {e}")
-        st.stop()
+        return pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
 
-    # ----------------------------
-    # PREP LOGREG MODEL / THRESHOLD
-    # ----------------------------
-    if isinstance(logreg_bundle, dict):
-        logreg_model = logreg_bundle.get("model", logreg_bundle)
-        logreg_threshold = float(logreg_bundle.get("threshold", 0.5))
-        if "features" in logreg_bundle and logreg_bundle["features"]:
-            model_features = logreg_bundle["features"]
-    else:
-        logreg_model = logreg_bundle
-        logreg_threshold = 0.5
+@st.cache_data
+def load_all_data():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # ----------------------------
-    # CLEAN DATA
-    # ----------------------------
-    # Normalize column names
-    main_df.columns = [col.upper() for col in main_df.columns]
+    data = {
+        "main_df": safe_read_csv(os.path.join(base_dir, "clean_crash_data.csv")),
+        "logreg_df": safe_read_csv(os.path.join(base_dir, "logreg_predictions_full.csv")),
+        "rf_df": safe_read_csv(os.path.join(base_dir, "tableau_gridsearch_predictions.csv")),
+        "sarima_df": safe_read_csv(os.path.join(base_dir, "tableau_sarima_final.csv")),
+        "metadata_df": safe_read_csv(os.path.join(base_dir, "model_metadata.csv")),
+    }
+    return data
+
+data = load_all_data()
+main_df = data["main_df"]
+sarima_df = data["sarima_df"]
+metadata_df = data["metadata_df"]
+
+# Normalize prediction DataFrames immediately at load time so that
+# lookup_prediction never fails due to column name / type mismatches.
+# normalize_lookup_df is defined further below — we apply it lazily via a
+# wrapper so the ordering issue is avoided.
+_raw_logreg_df = data["logreg_df"]
+_raw_rf_df     = data["rf_df"]
+
+# -----------------------------------
+# DATA CLEANING
+# -----------------------------------
+if not main_df.empty:
+    main_df.columns = [c.upper().strip() for c in main_df.columns]
 
     if "BOROUGH" in main_df.columns:
         main_df["BOROUGH"] = main_df["BOROUGH"].astype(str).str.strip().str.upper()
-        main_df = main_df[main_df["BOROUGH"] != "UNKNOWN"]
+        main_df = main_df[main_df["BOROUGH"].isin(BOROUGHS)]
 
     if "NUMBER OF PERSONS INJURED" in main_df.columns:
         main_df["NUMBER OF PERSONS INJURED"] = pd.to_numeric(
             main_df["NUMBER OF PERSONS INJURED"], errors="coerce"
         ).fillna(0)
 
-    # ----------------------------
-    # BOROUGH STATS
-    # ----------------------------
-    if "BOROUGH" in main_df.columns and "NUMBER OF PERSONS INJURED" in main_df.columns:
-        borough_stats_df = (
-            main_df.groupby("BOROUGH")
-            .agg(
-                total_crashes=("BOROUGH", "size"),
-                total_injuries=("NUMBER OF PERSONS INJURED", "sum")
-            )
-            .reset_index()
+# -----------------------------------
+# BOROUGH STATS
+# -----------------------------------
+def build_borough_stats(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame()
+
+    required_cols = ["BOROUGH", "NUMBER OF PERSONS INJURED"]
+    if not all(col in df.columns for col in required_cols):
+        return pd.DataFrame()
+
+    borough_stats = (
+        df.groupby("BOROUGH")
+        .agg(
+            total_crashes=("BOROUGH", "size"),
+            total_injuries=("NUMBER OF PERSONS INJURED", "sum")
         )
-        borough_stats_df["injury_rate"] = (
-            borough_stats_df["total_injuries"] / borough_stats_df["total_crashes"]
+        .reset_index()
+    )
+    borough_stats["injury_rate"] = borough_stats["total_injuries"] / borough_stats["total_crashes"]
+    borough_stats = borough_stats.sort_values("injury_rate", ascending=False).reset_index(drop=True)
+    return borough_stats
+
+borough_stats_df = build_borough_stats(main_df)
+
+def get_borough_overview_text() -> str:
+    if borough_stats_df.empty:
+        return "I could not calculate borough statistics because the main dataset is missing or incomplete."
+
+    highest = borough_stats_df.iloc[0]
+    safest = borough_stats_df.sort_values("injury_rate", ascending=True).iloc[0]
+    most_crashes = borough_stats_df.sort_values("total_crashes", ascending=False).iloc[0]
+
+    return (
+        f"**Historical Borough Overview**\n\n"
+        f"- Highest injury rate: **{highest['BOROUGH'].title()}** "
+        f"({highest['injury_rate']:.2%})\n"
+        f"- Lowest injury rate: **{safest['BOROUGH'].title()}** "
+        f"({safest['injury_rate']:.2%})\n"
+        f"- Most crashes: **{most_crashes['BOROUGH'].title()}** "
+        f"({int(most_crashes['total_crashes']):,})"
+    )
+
+def compare_boroughs_text(boroughs: list[str]) -> str:
+    if borough_stats_df.empty:
+        return "I could not compare boroughs because the historical dataset is missing."
+
+    wanted = [b.strip().upper() for b in boroughs if b.strip().upper() in BOROUGHS]
+    subset = borough_stats_df[borough_stats_df["BOROUGH"].isin(wanted)]
+
+    if subset.empty:
+        return "I could not find valid borough names. Try Brooklyn, Queens, Manhattan, Bronx, or Staten Island."
+
+    lines = ["**Borough Comparison**\n"]
+    for _, row in subset.iterrows():
+        lines.append(
+            f"- **{row['BOROUGH'].title()}**: "
+            f"{int(row['total_crashes']):,} crashes, "
+            f"{int(row['total_injuries']):,} injuries, "
+            f"injury rate **{row['injury_rate']:.2%}**"
         )
-        borough_stats_df = borough_stats_df.sort_values("injury_rate", ascending=False)
-    else:
-        borough_stats_df = pd.DataFrame(columns=["BOROUGH", "total_crashes", "total_injuries", "injury_rate"])
+    return "\n".join(lines)
 
-    def get_borough_statistics(comparison_boroughs=None):
-        df = borough_stats_df.copy()
+# -----------------------------------
+# FORECAST HELPERS
+# -----------------------------------
+def detect_forecast_column(df: pd.DataFrame) -> str | None:
+    if df.empty:
+        return None
 
-        if df.empty:
-            return {
-                "type": "error",
-                "message": "Borough statistics could not be created from the dataset."
-            }
+    candidates = [
+        "forecast", "predicted", "prediction", "predicted_calls",
+        "forecasted_calls", "sarima_forecast", "value", "incident_count"
+    ]
+    lower_map = {col.lower(): col for col in df.columns}
+    for c in candidates:
+        if c in lower_map:
+            return lower_map[c]
+    return None
 
-        if comparison_boroughs:
-            wanted = [b.strip().upper() for b in comparison_boroughs]
-            df = df[df["BOROUGH"].isin(wanted)]
+def forecast_text(steps: int) -> str:
+    if sarima_df.empty:
+        return "Forecast data is missing. Please add `tableau_sarima_final.csv`."
 
-            return {
-                "type": "borough_comparison",
-                "borough_stats": df.to_dict(orient="records")
-            }
+    forecast_col = detect_forecast_column(sarima_df)
+    if not forecast_col:
+        return (
+            "I found the SARIMA file, but I could not detect a forecast column. "
+            "Expected something like `predicted_calls` or `forecast`."
+        )
 
-        highest = df.iloc[0]
-        safest = df.sort_values("injury_rate", ascending=True).iloc[0]
-        most_crashes = df.sort_values("total_crashes", ascending=False).iloc[0]
+    steps = max(1, min(int(steps), 168))
+    values = sarima_df[forecast_col].dropna().tail(steps).tolist()
 
-        return {
-            "type": "borough_overview",
-            "highest_injury_rate_borough": highest.to_dict(),
-            "safest_borough": safest.to_dict(),
-            "most_crashes_borough": most_crashes.to_dict(),
-            "borough_stats": df.to_dict(orient="records")
-        }
+    if not values:
+        return "I could not build the forecast output because the forecast column is empty."
 
-    # ----------------------------
-    # MODEL INPUT PREP
-    # ----------------------------
-    def prepare_input(borough, hour, day_of_week):
-        borough = str(borough).strip().lower()
+    rounded = [round(float(v), 2) for v in values[:20]]
+    avg_val = sum(values) / len(values)
+    max_val = max(values)
+    min_val = min(values)
 
-        input_df = pd.DataFrame([{
-            "borough": borough,
-            "hour": int(hour),
-            "day_of_week": int(day_of_week)
-        }])
+    return (
+        f"**Forecast for next {steps} hours**\n\n"
+        f"- Average predicted crashes: **{avg_val:.2f}**\n"
+        f"- Peak predicted crashes: **{max_val:.2f}**\n"
+        f"- Lowest predicted crashes: **{min_val:.2f}**\n\n"
+        f"First values: `{rounded}`"
+    )
 
-        input_df = pd.get_dummies(input_df)
-        input_df = input_df.reindex(columns=model_features, fill_value=0)
-        return input_df
+# -----------------------------------
+# RISK PREDICTION HELPERS
+# -----------------------------------
+def normalize_lookup_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
 
-    def predict_with_logreg(borough, hour, day_of_week):
-        X = prepare_input(borough, hour, day_of_week)
+    copy_df = df.copy()
+    copy_df.columns = [c.lower().strip() for c in copy_df.columns]
 
-        proba = logreg_model.predict_proba(X)[0][1]
-        pred = 1 if proba >= logreg_threshold else 0
+    # borough kolonunu düzelt
+    if "borough" in copy_df.columns:
+        copy_df["borough"] = copy_df["borough"].astype(str).str.strip().str.upper()
 
-        return {
-            "model": "logreg",
-            "prediction": int(pred),
-            "probability": float(proba),
-            "threshold": float(logreg_threshold)
-        }
+    # rf / başka csv'lerde borough_name varsa ve borough boşsa oradan doldur
+    if "borough_name" in copy_df.columns:
+        copy_df["borough_name"] = copy_df["borough_name"].astype(str).str.strip().str.upper()
 
-    def predict_with_gridsearch(borough, hour, day_of_week):
-        X = prepare_input(borough, hour, day_of_week)
-        pred = gridsearch_model.predict(X)[0]
-
-        result = {
-            "model": "gridsearch",
-            "prediction": int(pred)
-        }
-
-        if hasattr(gridsearch_model, "predict_proba"):
-            result["probabilities"] = gridsearch_model.predict_proba(X)[0].tolist()
-
-        return result
-
-    def forecast_with_sarimax(steps=24):
-        steps = int(steps)
-        forecast = sarimax_model.forecast(steps=steps)
-
-        if hasattr(forecast, "tolist"):
-            forecast_values = forecast.tolist()
+        if "borough" not in copy_df.columns:
+            copy_df["borough"] = copy_df["borough_name"]
         else:
-            forecast_values = list(forecast)
+            copy_df["borough"] = copy_df["borough"].replace(["", "NAN", "NONE"], pd.NA)
+            copy_df["borough"] = copy_df["borough"].fillna(copy_df["borough_name"])
 
-        return {
-            "model": "sarimax",
-            "steps": steps,
-            "forecast": forecast_values
-        }
+    # numeric kolonları düzelt
+    if "hour" in copy_df.columns:
+        copy_df["hour"] = pd.to_numeric(copy_df["hour"], errors="coerce")
 
-    analysis_summary = {
-        "project": "NYC crash analysis",
-        "focus": "crash patterns, borough comparisons, injury prediction",
-        "models": ["logistic regression", "grid search model", "sarimax"]
-    }
+    if "day_of_week" in copy_df.columns:
+        copy_df["day_of_week"] = pd.to_numeric(copy_df["day_of_week"], errors="coerce")
 
-    # ----------------------------
-    # TOOL DEFINITIONS
-    # ----------------------------
+    # prediction kolonlarını ortaklaştır
+    if "gs_pred_class" in copy_df.columns and "predicted" not in copy_df.columns:
+        copy_df["predicted"] = copy_df["gs_pred_class"]
+
+    if "gs_pred_prob" in copy_df.columns and "probability" not in copy_df.columns:
+        copy_df["probability"] = copy_df["gs_pred_prob"]
+
+    # sadece gerekli kolonları sağlamlaştır
+    if {"borough", "hour", "day_of_week"}.issubset(copy_df.columns):
+        copy_df = copy_df.dropna(subset=["borough", "hour", "day_of_week"]).copy()
+        copy_df["borough"] = copy_df["borough"].astype(str).str.strip().str.upper()
+        copy_df["hour"] = copy_df["hour"].astype(int)
+        copy_df["day_of_week"] = copy_df["day_of_week"].astype(int)
+
+    return copy_df
+
+# Now that normalize_lookup_df is defined, build the normalised globals.
+logreg_df = normalize_lookup_df(_raw_logreg_df)
+rf_df     = normalize_lookup_df(_raw_rf_df)
+
+def lookup_prediction(df: pd.DataFrame, borough: str, hour: int, day_of_week: int):
+    """Look up a prediction row with a 3-tier fallback strategy.
+
+    Tier 1 – exact match  (borough + hour + day_of_week)
+    Tier 2 – same borough + same hour  (any day)
+    Tier 3 – same borough, closest hour+day by Manhattan distance
+    """
+    if df.empty:
+        return None
+
+    needed = {"borough", "hour", "day_of_week"}
+    if not needed.issubset(set(df.columns)):
+        return None
+
+    borough_upper = str(borough).strip().upper()
+    hour_int      = int(hour)
+    dow_int       = int(day_of_week)
+
+    # --- Tier 1: exact ---
+    exact = df[
+        (df["borough"]     == borough_upper) &
+        (df["hour"]        == hour_int) &
+        (df["day_of_week"] == dow_int)
+    ]
+    if not exact.empty:
+        row = exact.iloc[0].to_dict()
+        row["_match_type"] = "exact"
+        return row
+
+    # --- Tier 2: same borough + same hour ---
+    same_hour = df[
+        (df["borough"] == borough_upper) &
+        (df["hour"]    == hour_int)
+    ]
+    if not same_hour.empty:
+        row = same_hour.iloc[0].to_dict()
+        row["_match_type"] = "same_hour"
+        return row
+
+    # --- Tier 3: same borough, closest by hour+day distance ---
+    same_borough = df[df["borough"] == borough_upper].copy()
+    if not same_borough.empty:
+        same_borough["_dist"] = (
+            (same_borough["hour"]        - hour_int).abs() +
+            (same_borough["day_of_week"] - dow_int).abs()
+        )
+        row = same_borough.sort_values("_dist").iloc[0].to_dict()
+        row["_match_type"] = "closest"
+        return row
+
+    return None
+
+def format_prediction_result(row: dict, model_name: str) -> str:
+    prediction = row.get("predicted", row.get("prediction", None))
+    probability = row.get("probability", row.get("predicted_probability", None))
+    borough = str(row.get("borough", "")).title()
+    hour = row.get("hour", "")
+    day = row.get("day_of_week", "")
+    match_type = row.get("_match_type", "exact")
+
+    risk_label = "High injury risk" if str(prediction) in ["1", "1.0"] else "Lower injury risk"
+
+    match_note = ""
+    if match_type == "same_hour":
+        match_note = "\n- Note: **Exact day was not found, so I used the same borough and hour.**"
+    elif match_type == "closest":
+        match_note = "\n- Note: **Exact match was not found, so I used the closest available record for this borough.**"
+
+    text = [
+        f"**{model_name} Prediction**",
+        "",
+        f"- Borough: **{borough}**",
+        f"- Hour: **{hour}**",
+        f"- Day of week: **{day}**",
+        f"- Predicted class: **{prediction}**",
+        f"- Interpretation: **{risk_label}**",
+    ]
+
+    if probability is not None and str(probability) != "nan":
+        try:
+            text.append(f"- Probability: **{float(probability):.2%}**")
+        except Exception:
+            text.append(f"- Probability: **{probability}**")
+
+    if match_note:
+        text.append(match_note)
+
+    return "\n".join(text)
+def risk_prediction_text(user_text: str) -> str:
+    """Parse a free-text query and return a formatted injury risk prediction."""
+    msg = user_text.lower().strip()
+
+    # --- Borough detection ---
+    borough = None
+    for b in BOROUGHS:
+        if b.lower() in msg:
+            borough = b
+            break
+
+    # --- Hour parsing (explicit "hour/saat = N" first, then bare number) ---
+    hour_match = re.search(r"(?:hour|hours|saat)\s*=?\s*(\d{1,2})", msg)
+    if hour_match:
+        hour = int(hour_match.group(1))
+    else:
+        # Fallback: first standalone 0-23 number NOT part of a larger number
+        fallback = re.search(r"(?<!\d)([01]?\d|2[0-3])(?!\d)", msg)
+        hour = int(fallback.group(1)) if fallback else None
+
+    # --- Day-of-week parsing ---
+    day_match = re.search(r"(?:day|gün)\s*=?\s*([0-6])", msg)
+    day_of_week = int(day_match.group(1)) if day_match else 0
+
+    # --- Validation ---
+    if hour is not None and not (0 <= hour <= 23):
+        hour = None
+
+    if not borough or hour is None:
+        return (
+            "To predict injury risk, please provide:\n"
+            "- **Borough** (Brooklyn, Queens, Manhattan, Bronx, Staten Island)\n"
+            "- **Hour** (0–23)\n"
+            "- **Day of week** (0=Monday … 6=Sunday) — optional, defaults to Monday\n\n"
+            "Example: `Predict injury risk in Brooklyn at hour 18 day=4`"
+        )
+
+    # --- Model lookup with clear error if CSV data is missing ---
+    row = lookup_prediction(logreg_df, borough, hour, day_of_week)
+    if row:
+        return format_prediction_result(row, "Logistic Regression")
+
+    row = lookup_prediction(rf_df, borough, hour, day_of_week)
+    if row:
+        return format_prediction_result(row, "GridSearch / Random Forest")
+
+    # Distinguish "borough not in CSV" from "CSV is missing entirely"
+    if logreg_df.empty and rf_df.empty:
+        return (
+            "⚠️ Prediction CSV files (`logreg_predictions_full.csv` and "
+            "`tableau_gridsearch_predictions.csv`) are missing. "
+            "Please make sure they are in the same directory as this app."
+        )
+
+    return (
+        f"⚠️ No prediction row found for **{borough.title()}** in the loaded CSV files.\n\n"
+        "This usually means the borough name in the CSV does not match. "
+        f"Available boroughs in the prediction data: "
+        f"{', '.join(sorted(logreg_df['borough'].unique())) if not logreg_df.empty else 'unknown'}."
+    )
+
+# -----------------------------------
+# SIMPLE CHAT ROUTER
+# -----------------------------------
+def generate_response(user_message: str) -> str:
+    lang = detect_language(user_message)
+    msg = user_message.lower().strip()
+
+    # 1) greeting
+    if is_greeting(msg):
+        if lang == "tr":
+            return (
+                "Merhaba! NYC car crash verileriyle ilgili yardımcı olabilirim.\n\n"
+                "Örnek sorular:\n"
+                "- `24 saat tahmin yap`\n"
+                "- `Brooklyn ve Queens'i karşılaştır`\n"
+                "- `En yüksek yaralanma oranı hangi borough'da?`\n"
+                "- `Brooklyn için saat 18 day=4 risk tahmini yap`"
+            )
+        return (
+            "Hello! I can help you with NYC car crash data.\n\n"
+            "Example questions:\n"
+            "- `Forecast 24 hours`\n"
+            "- `Compare Brooklyn and Queens`\n"
+            "- `Which borough has the highest injury rate?`\n"
+            "- `Predict injury risk in Brooklyn at hour 18 day=4`"
+        )
+
+    # 2) forecast
+    if any(word in msg for word in ["forecast", "predict future", "gelecek", "tahmin", "next"]):
+        step_match = re.search(r"\b(\d{1,3})\s*(hour|hours|saat)\b", msg)
+        if step_match:
+            steps = int(step_match.group(1))
+            response = forecast_text(steps)
+            return translate_response(response, lang)
+
+        if lang == "tr":
+            return "Kaç saatlik tahmin istediğini yaz. Örnek: `24 saat`"
+        return "Please tell me how many hours to forecast. Example: `24 hours`"
+
+    # 3) compare
+    if "compare" in msg or "karşılaştır" in msg:
+        found = [b for b in BOROUGHS if b.lower() in msg]
+        if len(found) >= 2:
+            response = compare_boroughs_text(found)
+            return translate_response(response, lang)
+
+        if lang == "tr":
+            return "Lütfen en az iki borough yaz. Örnek: `Brooklyn ve Queens'i karşılaştır`"
+        return "Please give at least two boroughs to compare. Example: `Compare Brooklyn and Queens`"
+
+    # 4) borough overview
+    if any(word in msg for word in ["borough", "safest", "highest injury", "most crashes", "overview"]):
+        response = get_borough_overview_text()
+        return translate_response(response, lang)
+
+    # 5) risk
+    if any(word in msg for word in ["risk", "injury risk", "predict injury", "classification"]):
+        response = risk_prediction_text(user_message)
+        return translate_response(response, lang)
+
+    # 6) fallback
+    if lang == "tr":
+        return (
+            "Soruyu tam anlayamadım ama şu konularda yardımcı olabilirim:\n\n"
+            "- `24 saat tahmin yap`\n"
+            "- `Brooklyn ve Queens'i karşılaştır`\n"
+            "- `En yüksek yaralanma oranı hangi borough'da?`\n"
+            "- `Brooklyn için saat 18 day=4 risk tahmini yap`"
+        )
+
+    return (
+        "I could not fully understand the question, but I can help with:\n\n"
+        "- `Forecast 24 hours`\n"
+        "- `Compare Brooklyn and Queens`\n"
+        "- `Which borough has the highest injury rate?`\n"
+        "- `Predict injury risk in Brooklyn at hour 18 day=4`"
+    )
+    
+def is_greeting(msg: str) -> bool:
+    msg = msg.lower().strip()
+
+    greeting_phrases = [
+        "merhaba", "selam", "selamlar", "iyi akşamlar", "iyi geceler", "günaydın",
+        "hello", "hi", "hey", "good morning", "good evening", "good afternoon",
+        "sa", "s.a", "selamün aleyküm"
+    ]
+
+    clean_msg = re.sub(r"[^\w\sçğıöşü]", " ", msg)
+    clean_msg = re.sub(r"\s+", " ", clean_msg).strip()
+
+    if clean_msg in greeting_phrases:
+        return True
+
+    tokens = clean_msg.split()
+    if len(tokens) <= 2 and any(token in greeting_phrases for token in tokens):
+        return True
+
+    return False
+
+# -----------------------------------
+# DASHBOARD
+# -----------------------------------
+if selected == "Dashboard":
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total Crashes", "1,554,600")
+    col2.metric("Avg Injury Rate", "31.88%")
+    col3.metric("Most Risky Borough", "Brooklyn")
+
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #1f2937, #374151);
+        padding: 28px;
+        border-radius: 16px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    ">
+        <h1 style="color: white; text-align: center; margin-bottom: 10px; font-size: 38px;">
+            🚗 OVERVIEW
+        </h1>
+        <p style="color: #e5e7eb; text-align: center; font-size: 18px; margin-bottom: 0;">
+            This dashboard explores crash trends, injury risk, borough hotspots,
+            and prediction outputs across New York City.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="
+        background: linear-gradient(135deg, #1f2937, #374151);
+        padding: 28px;
+        border-radius: 16px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    ">
+        <h1 style="color: white; text-align: center; margin-bottom: 10px; font-size: 38px;">
+            🚨 PURPOSE OF THE PROJECT
+        </h1>
+        <p style="color: #e5e7eb; text-align: center; font-size: 18px; margin-bottom: 0;">
+            This project explores NYC crash data to uncover key trends and risk patterns.
+            It uses data analysis and visualization to support safer urban planning.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <p style='text-align: center; font-size:17px; color:#888;'>
+    Data source:
+    <a href='https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95/about_data' target='_blank'>
+    Motor Vehicle Collisions – Crashes (NYC Open Data)
+    </a>
+    </p>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### 🌎 NYC Traffic Crash Distribution by Borough")
+    hour_url = "https://public.tableau.com/views/NYCTrafficcrashdisturabitionbyborough/Sheet1?:embed=true&:showVizHome=no"
+    st.components.v1.iframe(hour_url, height=800, scrolling=True)
+    st.markdown("**Insight:** Crash counts are highest in Brooklyn and Queens.")
+
+    st.divider()
+
+    st.markdown("### 🆚 Actual vs Predicted Crash Trend")
+    sarima_url = "https://public.tableau.com/views/nyccarcrashsarima/Dashboard1?:embed=true&:showVizHome=no"
+    st.components.v1.iframe(sarima_url, height=800, scrolling=True)
+    st.markdown("**Insight:** Crash patterns show repeated daily movement over time.")
+
+    st.divider()
+
+    st.markdown("### 🆚 Predicted vs Actual Injury Rate by Borough")
+    injury_url = "https://public.tableau.com/views/modelperformancepredictvsactualinjuryratebyborough/Dashboard2?:showVizHome=no"
+    st.components.v1.iframe(injury_url, height=800, scrolling=True)
+    st.markdown("**Insight:** Predicted injury rates are close to actual values in most boroughs.")
+
+# -----------------------------------
+# AI ASSISTANT
+# -----------------------------------
+if selected == "AI Assistant":
+    st.title("🛞 NYC Car Crash Assistant")
+    st.caption("Powered by GPT + CSV-based crash analytics | Built by Utku Seyithanoğlu")
+
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+
+    def tool_get_borough_overview():
+        return get_borough_overview_text()
+
+    def tool_compare_boroughs(boroughs: list[str]):
+        return compare_boroughs_text(boroughs)
+
+    def tool_forecast_hours(hours: int):
+        return forecast_text(hours)
+
+    def tool_predict_injury_risk(borough: str, hour: int, day_of_week: int):
+        """Called by GPT with structured args — skip string parsing entirely."""
+        borough_upper = str(borough).strip().upper()
+
+        # Validate inputs
+        if borough_upper not in BOROUGHS:
+            return (
+                f"Unknown borough: '{borough}'. "
+                f"Valid options are: {', '.join(b.title() for b in BOROUGHS)}."
+            )
+        if not (0 <= int(hour) <= 23):
+            return "Invalid hour. Please use a value between 0 and 23."
+        if not (0 <= int(day_of_week) <= 6):
+            return "Invalid day_of_week. Use 0 (Monday) through 6 (Sunday)."
+
+        # Try Logistic Regression CSV first, then Random Forest
+        row = lookup_prediction(logreg_df, borough_upper, int(hour), int(day_of_week))
+        if row:
+            return format_prediction_result(row, "Logistic Regression")
+
+        row = lookup_prediction(rf_df, borough_upper, int(hour), int(day_of_week))
+        if row:
+            return format_prediction_result(row, "GridSearch / Random Forest")
+
+        # Diagnostic: show what boroughs ARE available so GPT can report it
+        available_lr = sorted(logreg_df["borough"].unique().tolist()) if not logreg_df.empty else []
+        available_rf = sorted(rf_df["borough"].unique().tolist()) if not rf_df.empty else []
+
+        if not available_lr and not available_rf:
+            return (
+                "⚠️ Prediction CSV files are missing from the server. "
+                "Please ensure `logreg_predictions_full.csv` and "
+                "`tableau_gridsearch_predictions.csv` are in the app directory."
+            )
+
+        return (
+            f"No prediction data found for **{borough.title()}** "
+            f"(hour={hour}, day={day_of_week}).\n\n"
+            f"Boroughs available in Logistic Regression data: {available_lr or 'none'}\n"
+            f"Boroughs available in Random Forest data: {available_rf or 'none'}"
+        )
+
+    system_prompt = f"""
+You are an expert data analyst assistant specializing in NYC car crash analysis.
+Your name is "NYC Crash Assistant". You were built by Utku Seyithanoğlu.
+
+════════════════════════════════════════
+LANGUAGE RULES  (CRITICAL — always follow)
+════════════════════════════════════════
+- Detect the language of the user's message.
+- If Turkish → reply entirely in Turkish.
+- If English → reply entirely in English.
+- Never mix languages in a single reply.
+- Translate technical terms naturally (e.g. "injury rate" → "yaralanma oranı").
+
+════════════════════════════════════════
+SCOPE
+════════════════════════════════════════
+You ONLY answer questions about:
+  • NYC borough-level crash & injury statistics
+  • Injury risk prediction (by borough, hour, day)
+  • Crash forecasts (SARIMA-based time series)
+  • Comparison of boroughs
+  • General project/model info
+
+If the user asks anything outside this scope, politely explain (in their language)
+that you can only help with NYC car crash analytics.
+
+════════════════════════════════════════
+TOOL USAGE  (mandatory — never invent numbers)
+════════════════════════════════════════
+Always call the appropriate tool before answering numeric questions.
+Never make up statistics, predictions, or forecast values.
+
+• Borough summary / safest / most crashes  →  tool_get_borough_overview
+• Compare two or more boroughs             →  tool_compare_boroughs
+• Forecast N hours                         →  tool_forecast_hours
+• Injury risk for borough+hour+day         →  tool_predict_injury_risk
+
+If a required parameter is missing (e.g. hour for risk prediction),
+ask the user for it in their language before calling the tool.
+
+If the tool returns a result saying CSV files are missing or no data was found,
+relay that diagnostic WORD FOR WORD to the user. Do NOT summarize, hide, or rephrase it.
+NEVER suggest alternative hours/days or list available combinations — you do not have that information.
+NEVER say "the data might be available for a different combination" — that is misleading.
+
+════════════════════════════════════════
+RESPONSE STYLE
+════════════════════════════════════════
+- Be concise, friendly, and natural — not robotic.
+- Use bullet points and bold for key numbers to improve readability.
+- For risk predictions: explain what "High risk" and "Low risk" mean in plain language.
+- For forecasts: always report average, peak, and lowest values.
+- For borough comparisons: present data in a clear side-by-side style.
+- If the tool result includes a fallback note (closest match / same hour),
+  mention it briefly so the user knows the result is approximate.
+- If a greeting is detected, welcome the user warmly and suggest 3-4 example questions.
+
+════════════════════════════════════════
+PROJECT CONTEXT
+════════════════════════════════════════
+Dataset    : NYC Motor Vehicle Collisions (NYC Open Data, 2012–2023)
+Boroughs   : Brooklyn, Queens, Manhattan, Bronx, Staten Island
+Models used: Logistic Regression, GridSearch / Random Forest, SARIMA
+
+Current borough summary:
+{get_borough_overview_text()}
+"""
+
     tools = [
         {
             "type": "function",
             "function": {
-                "name": "predict_with_logreg",
-                "description": "Predict injury risk for a given NYC crash scenario using logistic regression.",
+                "name": "tool_get_borough_overview",
+                "description": "Returns the borough-level crash and injury overview.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "borough": {
-                            "type": "string",
-                            "description": "NYC borough name (e.g., Brooklyn, Queens, Manhattan, Bronx, Staten Island)"
-                        },
-                        "hour": {
-                            "type": "integer",
-                            "description": "Hour of day (0-23)"
-                        },
-                        "day_of_week": {
-                            "type": "integer",
-                            "description": "Day of week (0=Monday, 6=Sunday)"
-                        }
-                    },
-                    "required": ["borough", "hour", "day_of_week"],
-                    "additionalProperties": False
+                    "properties": {}
                 }
             }
         },
         {
             "type": "function",
             "function": {
-                "name": "predict_with_gridsearch",
-                "description": "Predict injury risk using the optimized classification model.",
+                "name": "tool_compare_boroughs",
+                "description": "Compares crash and injury statistics across boroughs.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "borough": {
-                            "type": "string",
-                            "description": "NYC borough name"
-                        },
-                        "hour": {
-                            "type": "integer",
-                            "description": "Hour of day (0-23)"
-                        },
-                        "day_of_week": {
-                            "type": "integer",
-                            "description": "Day of week (0-6)"
-                        }
-                    },
-                    "required": ["borough", "hour", "day_of_week"],
-                    "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "forecast_with_sarimax",
-                "description": "Forecast future NYC crash counts using SARIMAX.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "steps": {
-                            "type": "integer",
-                            "description": "Number of future hours to forecast"
-                        }
-                    },
-                    "required": ["steps"],
-                    "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_analysis_summary",
-                "description": "Return a summary of the NYC crash analysis project.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_borough_statistics",
-                "description": "Return historical borough-level crash statistics and injury rates.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "comparison_boroughs": {
+                        "boroughs": {
                             "type": "array",
                             "items": {"type": "string"},
-                            "description": "Optional list of borough names to compare"
+                            "description": "List of borough names"
                         }
                     },
-                    "additionalProperties": False
+                    "required": ["boroughs"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_forecast_hours",
+                "description": "Returns crash forecast summary for the requested number of hours.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "hours": {
+                            "type": "integer",
+                            "description": "Number of hours for forecast"
+                        }
+                    },
+                    "required": ["hours"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_predict_injury_risk",
+                "description": "Predicts injury risk for a borough, hour, and day_of_week.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "borough": {
+                            "type": "string",
+                            "description": "Borough name"
+                        },
+                        "hour": {
+                            "type": "integer",
+                            "description": "Hour from 0 to 23"
+                        },
+                        "day_of_week": {
+                            "type": "integer",
+                            "description": "Day of week where 0=Monday and 6=Sunday"
+                        }
+                    },
+                    "required": ["borough", "hour", "day_of_week"]
                 }
             }
         }
     ]
 
-    system_prompt = """
-You are an AI assistant specialized in NYC motor vehicle crash analysis.
-
-IMPORTANT:
-You only know what is available through the provided tools.
-You MUST use tools when needed.
-Do not pretend to retrieve or calculate data unless you are calling a tool.
-
-LANGUAGE RULE:
-- If the user writes in Turkish, respond in Turkish.
-- If the user writes in English, respond in English.
-
-AVAILABLE TOOLS:
-1. predict_with_logreg
-2. predict_with_gridsearch
-3. forecast_with_sarimax
-4. get_analysis_summary
-5. get_borough_statistics
-
-TASK RULES:
-- Historical questions about borough rankings, safest borough, highest injury rate, comparisons:
-  ALWAYS call get_borough_statistics
-- Scenario-based prediction:
-  use predict_with_logreg or predict_with_gridsearch
-- Forecast questions:
-  use forecast_with_sarimax
-- Project/model questions:
-  use get_analysis_summary
-
-CRITICAL RULES:
-- NEVER invent numbers
-- NEVER guess borough rankings
-- ALWAYS use a tool when data is needed
-- Clearly distinguish historical data from model predictions
-
-STYLE:
-- Clear
-- Short but informative
-- Natural explanation, not raw JSON
-"""
-
-    # ----------------------------
-    # SESSION STATE
-    # ----------------------------
-    if "conversation_history" not in st.session_state:
-        st.session_state.conversation_history = []
-
     if "chat_messages" not in st.session_state:
         st.session_state.chat_messages = [
             {
                 "role": "assistant",
-                "content": "Hi! Ask me about borough crash statistics, injury risk, or future crash forecasts."
+                "content": (
+                    "Hi! I can help you with NYC car crash analysis.\n\n"
+                    "Example questions:\n"
+                    "- Forecast 24 hours\n"
+                    "- Compare Brooklyn and Queens\n"
+                    "- Which borough has the highest injury rate?\n"
+                )
             }
         ]
 
-    # ----------------------------
-    # CHAT FUNCTION
-    # ----------------------------
-    def chat(user_message):
-        st.session_state.conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
-
-        while True:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "system", "content": system_prompt}] + st.session_state.conversation_history,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.2
-            )
-
-            message = response.choices[0].message
-
-            if getattr(message, "tool_calls", None):
-                st.session_state.conversation_history.append(message)
-
-                for tool_call in message.tool_calls:
-                    fn_name = tool_call.function.name
-                    args = json.loads(tool_call.function.arguments) if tool_call.function.arguments else {}
-
-                    try:
-                        if fn_name == "predict_with_logreg":
-                            result = predict_with_logreg(**args)
-
-                        elif fn_name == "predict_with_gridsearch":
-                            result = predict_with_gridsearch(**args)
-
-                        elif fn_name == "forecast_with_sarimax":
-                            result = forecast_with_sarimax(**args)
-
-                        elif fn_name == "get_analysis_summary":
-                            result = analysis_summary
-
-                        elif fn_name == "get_borough_statistics":
-                            result = get_borough_statistics(**args)
-
-                        else:
-                            result = {"error": f"Unknown function: {fn_name}"}
-
-                    except Exception as e:
-                        result = {"error": str(e)}
-
-                    st.session_state.conversation_history.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": json.dumps(result)
-                    })
-
-                continue
-
-            assistant_message = message.content if message.content else "I could not generate a response."
-
-            st.session_state.conversation_history.append({
-                "role": "assistant",
-                "content": assistant_message
-            })
-
-            return assistant_message
-
-    # ----------------------------
-    # DISPLAY CHAT HISTORY
-    # ----------------------------
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # ----------------------------
-    # USER INPUT
-    # ----------------------------
     user_prompt = st.chat_input("Ask about NYC crashes...")
 
     if user_prompt:
@@ -575,13 +853,80 @@ STYLE:
         with st.chat_message("user"):
             st.markdown(user_prompt)
 
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    answer = chat(user_prompt)
-                except Exception as e:
-                    answer = f"Error: {e}"
+        if not api_key:
+            answer = generate_response(user_prompt)
+        else:
+            try:
+                client = OpenAI(api_key=api_key)
+                response = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *st.session_state.chat_messages,
+                    ],
+                    tools=tools,
+                    tool_choice="auto"
+                )
 
-                st.markdown(answer)
+                message = response.choices[0].message
+
+                if message.tool_calls:
+                    tool_messages = []
+
+                    for tool_call in message.tool_calls:
+                        fn_name = tool_call.function.name
+                        args = json.loads(tool_call.function.arguments or "{}")
+
+                        if fn_name == "tool_get_borough_overview":
+                            result = tool_get_borough_overview()
+                        elif fn_name == "tool_compare_boroughs":
+                            result = tool_compare_boroughs(args.get("boroughs", []))
+                        elif fn_name == "tool_forecast_hours":
+                            result = tool_forecast_hours(args.get("hours", 24))
+                        elif fn_name == "tool_predict_injury_risk":
+                            result = tool_predict_injury_risk(
+                                args.get("borough", ""),
+                                args.get("hour", 0),
+                                args.get("day_of_week", 0),
+                            )
+                            # If the result is a diagnostic/error (not a real prediction),
+                            # return it directly — do NOT let GPT paraphrase/hide it.
+                            if result.startswith("⚠️") or result.startswith("No prediction") or result.startswith("Unknown borough"):
+                                answer = result
+                                st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                                with st.chat_message("assistant"):
+                                    st.markdown(answer)
+                                st.stop()
+                        else:
+                            result = "Tool not found."
+
+                        tool_messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": result,
+                        })
+
+                    follow_up = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            *st.session_state.chat_messages,
+                            {
+                                "role": "assistant",
+                                "content": message.content or "",
+                                "tool_calls": message.tool_calls,
+                            },
+                            *tool_messages,
+                        ],
+                    )
+                    answer = follow_up.choices[0].message.content
+                else:
+                    answer = message.content
+            except Exception as e:
+                st.warning(f"GPT API error: {e} — falling back to local router.")
+                answer = generate_response(user_prompt)
+
+        with st.chat_message("assistant"):
+            st.markdown(answer)
 
         st.session_state.chat_messages.append({"role": "assistant", "content": answer})
