@@ -132,13 +132,16 @@ if not main_df.empty:
     main_df.columns = [c.upper().strip() for c in main_df.columns]
 
     if "BOROUGH" in main_df.columns:
-        main_df["BOROUGH"] = main_df["BOROUGH"].astype(str).str.strip().str.upper()
-        main_df = main_df[main_df["BOROUGH"].isin(BOROUGHS)]
+        main_df.loc[:, "BOROUGH"] = main_df["BOROUGH"].astype(str).str.strip().str.upper()
+        main_df = main_df.loc[main_df["BOROUGH"].isin(BOROUGHS)].copy()
 
     if "NUMBER OF PERSONS INJURED" in main_df.columns:
-        main_df["NUMBER OF PERSONS INJURED"] = pd.to_numeric(
-            main_df["NUMBER OF PERSONS INJURED"], errors="coerce"
+        injured_col = pd.to_numeric(
+        main_df["NUMBER OF PERSONS INJURED"],
+        errors="coerce"
         ).fillna(0)
+
+        main_df.loc[:, "NUMBER OF PERSONS INJURED"] = injured_col
 
 # -----------------------------------
 # BOROUGH STATS
