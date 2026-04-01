@@ -7,3 +7,8 @@ matplotlib==3.8.4
 python-dotenv==1.0.1
 streamlit-option-menu==0.4.0
 scikit-learn==1.4.2
+streamlit
+pandas
+python-dotenv
+streamlit-option-menu
+openai
