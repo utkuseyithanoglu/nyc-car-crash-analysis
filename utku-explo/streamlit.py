@@ -4,8 +4,8 @@ import json
 import pandas as pd
 import streamlit as st
 from streamlit_option_menu import option_menu
-from openai import OpenAI
 from dotenv import load_dotenv
+
 
 def detect_language(text: str) -> str:
     text = text.lower().strip()
@@ -47,6 +47,37 @@ def translate_response(text: str, lang: str) -> str:
             .replace("I can help with", "Şunlarda yardımcı olabilirim")
         )
     return text
+
+
+def is_greeting(msg: str) -> bool:
+    msg = msg.lower().strip()
+
+    greeting_phrases = [
+        "merhaba", "selam", "selamlar", "iyi akşamlar", "iyi geceler", "günaydın",
+        "hello", "hi", "hey", "good morning", "good evening", "good afternoon",
+        "sa", "s.a", "selamün aleyküm"
+    ]
+
+    clean_msg = re.sub(r"[^\w\sçğıöşü]", " ", msg)
+    clean_msg = re.sub(r"\s+", " ", clean_msg).strip()
+
+    if clean_msg in greeting_phrases:
+        return True
+
+    tokens = clean_msg.split()
+    if len(tokens) <= 2 and any(token in greeting_phrases for token in tokens):
+        return True
+
+    return False
+
+
+def get_openai_client(api_key: str):
+    try:
+        from openai import OpenAI
+        return OpenAI(api_key=api_key), None
+    except Exception as e:
+        return None, e
+
 
 # -----------------------------------
 # PAGE CONFIG
@@ -92,6 +123,7 @@ selected = option_menu(
 # -----------------------------------
 BOROUGHS = ["BROOKLYN", "QUEENS", "MANHATTAN", "BRONX", "STATEN ISLAND"]
 
+
 def safe_read_csv(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame()
@@ -99,6 +131,7 @@ def safe_read_csv(path: str) -> pd.DataFrame:
         return pd.read_csv(path)
     except Exception:
         return pd.DataFrame()
+
 
 @st.cache_data
 def load_all_data():
@@ -113,17 +146,14 @@ def load_all_data():
     }
     return data
 
+
 data = load_all_data()
 main_df = data["main_df"]
 sarima_df = data["sarima_df"]
 metadata_df = data["metadata_df"]
 
-# Normalize prediction DataFrames immediately at load time so that
-# lookup_prediction never fails due to column name / type mismatches.
-# normalize_lookup_df is defined further below — we apply it lazily via a
-# wrapper so the ordering issue is avoided.
 _raw_logreg_df = data["logreg_df"]
-_raw_rf_df     = data["rf_df"]
+_raw_rf_df = data["rf_df"]
 
 # -----------------------------------
 # DATA CLEANING
@@ -137,8 +167,8 @@ if not main_df.empty:
 
     if "NUMBER OF PERSONS INJURED" in main_df.columns:
         injured_col = pd.to_numeric(
-        main_df["NUMBER OF PERSONS INJURED"],
-        errors="coerce"
+            main_df["NUMBER OF PERSONS INJURED"],
+            errors="coerce"
         ).fillna(0)
 
         main_df.loc[:, "NUMBER OF PERSONS INJURED"] = injured_col
@@ -166,7 +196,9 @@ def build_borough_stats(df: pd.DataFrame) -> pd.DataFrame:
     borough_stats = borough_stats.sort_values("injury_rate", ascending=False).reset_index(drop=True)
     return borough_stats
 
+
 borough_stats_df = build_borough_stats(main_df)
+
 
 def get_borough_overview_text() -> str:
     if borough_stats_df.empty:
@@ -185,6 +217,7 @@ def get_borough_overview_text() -> str:
         f"- Most crashes: **{most_crashes['BOROUGH'].title()}** "
         f"({int(most_crashes['total_crashes']):,})"
     )
+
 
 def compare_boroughs_text(boroughs: list[str]) -> str:
     if borough_stats_df.empty:
@@ -222,6 +255,7 @@ def detect_forecast_column(df: pd.DataFrame) -> str | None:
         if c in lower_map:
             return lower_map[c]
     return None
+
 
 def forecast_text(steps: int) -> str:
     if sarima_df.empty:
@@ -263,11 +297,9 @@ def normalize_lookup_df(df: pd.DataFrame) -> pd.DataFrame:
     copy_df = df.copy()
     copy_df.columns = [c.lower().strip() for c in copy_df.columns]
 
-    # borough kolonunu düzelt
     if "borough" in copy_df.columns:
         copy_df["borough"] = copy_df["borough"].astype(str).str.strip().str.upper()
 
-    # rf / başka csv'lerde borough_name varsa ve borough boşsa oradan doldur
     if "borough_name" in copy_df.columns:
         copy_df["borough_name"] = copy_df["borough_name"].astype(str).str.strip().str.upper()
 
@@ -277,21 +309,18 @@ def normalize_lookup_df(df: pd.DataFrame) -> pd.DataFrame:
             copy_df["borough"] = copy_df["borough"].replace(["", "NAN", "NONE"], pd.NA)
             copy_df["borough"] = copy_df["borough"].fillna(copy_df["borough_name"])
 
-    # numeric kolonları düzelt
     if "hour" in copy_df.columns:
         copy_df["hour"] = pd.to_numeric(copy_df["hour"], errors="coerce")
 
     if "day_of_week" in copy_df.columns:
         copy_df["day_of_week"] = pd.to_numeric(copy_df["day_of_week"], errors="coerce")
 
-    # prediction kolonlarını ortaklaştır
     if "gs_pred_class" in copy_df.columns and "predicted" not in copy_df.columns:
         copy_df["predicted"] = copy_df["gs_pred_class"]
 
     if "gs_pred_prob" in copy_df.columns and "probability" not in copy_df.columns:
         copy_df["probability"] = copy_df["gs_pred_prob"]
 
-    # sadece gerekli kolonları sağlamlaştır
     if {"borough", "hour", "day_of_week"}.issubset(copy_df.columns):
         copy_df = copy_df.dropna(subset=["borough", "hour", "day_of_week"]).copy()
         copy_df["borough"] = copy_df["borough"].astype(str).str.strip().str.upper()
@@ -300,17 +329,12 @@ def normalize_lookup_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return copy_df
 
-# Now that normalize_lookup_df is defined, build the normalised globals.
+
 logreg_df = normalize_lookup_df(_raw_logreg_df)
-rf_df     = normalize_lookup_df(_raw_rf_df)
+rf_df = normalize_lookup_df(_raw_rf_df)
+
 
 def lookup_prediction(df: pd.DataFrame, borough: str, hour: int, day_of_week: int):
-    """Look up a prediction row with a 3-tier fallback strategy.
-
-    Tier 1 – exact match  (borough + hour + day_of_week)
-    Tier 2 – same borough + same hour  (any day)
-    Tier 3 – same borough, closest hour+day by Manhattan distance
-    """
     if df.empty:
         return None
 
@@ -319,13 +343,12 @@ def lookup_prediction(df: pd.DataFrame, borough: str, hour: int, day_of_week: in
         return None
 
     borough_upper = str(borough).strip().upper()
-    hour_int      = int(hour)
-    dow_int       = int(day_of_week)
+    hour_int = int(hour)
+    dow_int = int(day_of_week)
 
-    # --- Tier 1: exact ---
     exact = df[
-        (df["borough"]     == borough_upper) &
-        (df["hour"]        == hour_int) &
+        (df["borough"] == borough_upper) &
+        (df["hour"] == hour_int) &
         (df["day_of_week"] == dow_int)
     ]
     if not exact.empty:
@@ -333,21 +356,19 @@ def lookup_prediction(df: pd.DataFrame, borough: str, hour: int, day_of_week: in
         row["_match_type"] = "exact"
         return row
 
-    # --- Tier 2: same borough + same hour ---
     same_hour = df[
         (df["borough"] == borough_upper) &
-        (df["hour"]    == hour_int)
+        (df["hour"] == hour_int)
     ]
     if not same_hour.empty:
         row = same_hour.iloc[0].to_dict()
         row["_match_type"] = "same_hour"
         return row
 
-    # --- Tier 3: same borough, closest by hour+day distance ---
     same_borough = df[df["borough"] == borough_upper].copy()
     if not same_borough.empty:
         same_borough["_dist"] = (
-            (same_borough["hour"]        - hour_int).abs() +
+            (same_borough["hour"] - hour_int).abs() +
             (same_borough["day_of_week"] - dow_int).abs()
         )
         row = same_borough.sort_values("_dist").iloc[0].to_dict()
@@ -355,6 +376,7 @@ def lookup_prediction(df: pd.DataFrame, borough: str, hour: int, day_of_week: in
         return row
 
     return None
+
 
 def format_prediction_result(row: dict, model_name: str) -> str:
     prediction = row.get("predicted", row.get("prediction", None))
@@ -392,31 +414,27 @@ def format_prediction_result(row: dict, model_name: str) -> str:
         text.append(match_note)
 
     return "\n".join(text)
+
+
 def risk_prediction_text(user_text: str) -> str:
-    """Parse a free-text query and return a formatted injury risk prediction."""
     msg = user_text.lower().strip()
 
-    # --- Borough detection ---
     borough = None
     for b in BOROUGHS:
         if b.lower() in msg:
             borough = b
             break
 
-    # --- Hour parsing (explicit "hour/saat = N" first, then bare number) ---
     hour_match = re.search(r"(?:hour|hours|saat)\s*=?\s*(\d{1,2})", msg)
     if hour_match:
         hour = int(hour_match.group(1))
     else:
-        # Fallback: first standalone 0-23 number NOT part of a larger number
         fallback = re.search(r"(?<!\d)([01]?\d|2[0-3])(?!\d)", msg)
         hour = int(fallback.group(1)) if fallback else None
 
-    # --- Day-of-week parsing ---
     day_match = re.search(r"(?:day|gün)\s*=?\s*([0-6])", msg)
     day_of_week = int(day_match.group(1)) if day_match else 0
 
-    # --- Validation ---
     if hour is not None and not (0 <= hour <= 23):
         hour = None
 
@@ -429,7 +447,6 @@ def risk_prediction_text(user_text: str) -> str:
             "Example: `Predict injury risk in Brooklyn at hour 18 day=4`"
         )
 
-    # --- Model lookup with clear error if CSV data is missing ---
     row = lookup_prediction(logreg_df, borough, hour, day_of_week)
     if row:
         return format_prediction_result(row, "Logistic Regression")
@@ -438,7 +455,6 @@ def risk_prediction_text(user_text: str) -> str:
     if row:
         return format_prediction_result(row, "GridSearch / Random Forest")
 
-    # Distinguish "borough not in CSV" from "CSV is missing entirely"
     if logreg_df.empty and rf_df.empty:
         return (
             "⚠️ Prediction CSV files (`logreg_predictions_full.csv` and "
@@ -460,7 +476,6 @@ def generate_response(user_message: str) -> str:
     lang = detect_language(user_message)
     msg = user_message.lower().strip()
 
-    # 1) greeting
     if is_greeting(msg):
         if lang == "tr":
             return (
@@ -480,7 +495,6 @@ def generate_response(user_message: str) -> str:
             "- `Predict injury risk in Brooklyn at hour 18 day=4`"
         )
 
-    # 2) forecast
     if any(word in msg for word in ["forecast", "predict future", "gelecek", "tahmin", "next"]):
         step_match = re.search(r"\b(\d{1,3})\s*(hour|hours|saat)\b", msg)
         if step_match:
@@ -492,7 +506,6 @@ def generate_response(user_message: str) -> str:
             return "Kaç saatlik tahmin istediğini yaz. Örnek: `24 saat`"
         return "Please tell me how many hours to forecast. Example: `24 hours`"
 
-    # 3) compare
     if "compare" in msg or "karşılaştır" in msg:
         found = [b for b in BOROUGHS if b.lower() in msg]
         if len(found) >= 2:
@@ -503,17 +516,14 @@ def generate_response(user_message: str) -> str:
             return "Lütfen en az iki borough yaz. Örnek: `Brooklyn ve Queens'i karşılaştır`"
         return "Please give at least two boroughs to compare. Example: `Compare Brooklyn and Queens`"
 
-    # 4) borough overview
     if any(word in msg for word in ["borough", "safest", "highest injury", "most crashes", "overview"]):
         response = get_borough_overview_text()
         return translate_response(response, lang)
 
-    # 5) risk
     if any(word in msg for word in ["risk", "injury risk", "predict injury", "classification"]):
         response = risk_prediction_text(user_message)
         return translate_response(response, lang)
 
-    # 6) fallback
     if lang == "tr":
         return (
             "Soruyu tam anlayamadım ama şu konularda yardımcı olabilirim:\n\n"
@@ -530,27 +540,6 @@ def generate_response(user_message: str) -> str:
         "- `Which borough has the highest injury rate?`\n"
         "- `Predict injury risk in Brooklyn at hour 18 day=4`"
     )
-    
-def is_greeting(msg: str) -> bool:
-    msg = msg.lower().strip()
-
-    greeting_phrases = [
-        "merhaba", "selam", "selamlar", "iyi akşamlar", "iyi geceler", "günaydın",
-        "hello", "hi", "hey", "good morning", "good evening", "good afternoon",
-        "sa", "s.a", "selamün aleyküm"
-    ]
-
-    clean_msg = re.sub(r"[^\w\sçğıöşü]", " ", msg)
-    clean_msg = re.sub(r"\s+", " ", clean_msg).strip()
-
-    if clean_msg in greeting_phrases:
-        return True
-
-    tokens = clean_msg.split()
-    if len(tokens) <= 2 and any(token in greeting_phrases for token in tokens):
-        return True
-
-    return False
 
 # -----------------------------------
 # DASHBOARD
@@ -647,10 +636,8 @@ if selected == "AI Assistant":
         return forecast_text(hours)
 
     def tool_predict_injury_risk(borough: str, hour: int, day_of_week: int):
-        """Called by GPT with structured args — skip string parsing entirely."""
         borough_upper = str(borough).strip().upper()
 
-        # Validate inputs
         if borough_upper not in BOROUGHS:
             return (
                 f"Unknown borough: '{borough}'. "
@@ -661,7 +648,6 @@ if selected == "AI Assistant":
         if not (0 <= int(day_of_week) <= 6):
             return "Invalid day_of_week. Use 0 (Monday) through 6 (Sunday)."
 
-        # Try Logistic Regression CSV first, then Random Forest
         row = lookup_prediction(logreg_df, borough_upper, int(hour), int(day_of_week))
         if row:
             return format_prediction_result(row, "Logistic Regression")
@@ -670,7 +656,6 @@ if selected == "AI Assistant":
         if row:
             return format_prediction_result(row, "GridSearch / Random Forest")
 
-        # Diagnostic: show what boroughs ARE available so GPT can report it
         available_lr = sorted(logreg_df["borough"].unique().tolist()) if not logreg_df.empty else []
         available_rf = sorted(rf_df["borough"].unique().tolist()) if not rf_df.empty else []
 
@@ -859,75 +844,82 @@ Current borough summary:
         if not api_key:
             answer = generate_response(user_prompt)
         else:
-            try:
-                client = OpenAI(api_key=api_key)
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        *st.session_state.chat_messages,
-                    ],
-                    tools=tools,
-                    tool_choice="auto"
-                )
+            client, client_error = get_openai_client(api_key)
 
-                message = response.choices[0].message
-
-                if message.tool_calls:
-                    tool_messages = []
-
-                    for tool_call in message.tool_calls:
-                        fn_name = tool_call.function.name
-                        args = json.loads(tool_call.function.arguments or "{}")
-
-                        if fn_name == "tool_get_borough_overview":
-                            result = tool_get_borough_overview()
-                        elif fn_name == "tool_compare_boroughs":
-                            result = tool_compare_boroughs(args.get("boroughs", []))
-                        elif fn_name == "tool_forecast_hours":
-                            result = tool_forecast_hours(args.get("hours", 24))
-                        elif fn_name == "tool_predict_injury_risk":
-                            result = tool_predict_injury_risk(
-                                args.get("borough", ""),
-                                args.get("hour", 0),
-                                args.get("day_of_week", 0),
-                            )
-                            # If the result is a diagnostic/error (not a real prediction),
-                            # return it directly — do NOT let GPT paraphrase/hide it.
-                            if result.startswith("⚠️") or result.startswith("No prediction") or result.startswith("Unknown borough"):
-                                answer = result
-                                st.session_state.chat_messages.append({"role": "assistant", "content": answer})
-                                with st.chat_message("assistant"):
-                                    st.markdown(answer)
-                                st.stop()
-                        else:
-                            result = "Tool not found."
-
-                        tool_messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": result,
-                        })
-
-                    follow_up = client.chat.completions.create(
+            if client is None:
+                st.warning(f"OpenAI import/client error: {client_error} — falling back to local router.")
+                answer = generate_response(user_prompt)
+            else:
+                try:
+                    response = client.chat.completions.create(
                         model="gpt-4o-mini",
                         messages=[
                             {"role": "system", "content": system_prompt},
                             *st.session_state.chat_messages,
-                            {
-                                "role": "assistant",
-                                "content": message.content or "",
-                                "tool_calls": message.tool_calls,
-                            },
-                            *tool_messages,
                         ],
+                        tools=tools,
+                        tool_choice="auto"
                     )
-                    answer = follow_up.choices[0].message.content
-                else:
-                    answer = message.content
-            except Exception as e:
-                st.warning(f"GPT API error: {e} — falling back to local router.")
-                answer = generate_response(user_prompt)
+
+                    message = response.choices[0].message
+
+                    if message.tool_calls:
+                        tool_messages = []
+
+                        for tool_call in message.tool_calls:
+                            fn_name = tool_call.function.name
+                            args = json.loads(tool_call.function.arguments or "{}")
+
+                            if fn_name == "tool_get_borough_overview":
+                                result = tool_get_borough_overview()
+                            elif fn_name == "tool_compare_boroughs":
+                                result = tool_compare_boroughs(args.get("boroughs", []))
+                            elif fn_name == "tool_forecast_hours":
+                                result = tool_forecast_hours(args.get("hours", 24))
+                            elif fn_name == "tool_predict_injury_risk":
+                                result = tool_predict_injury_risk(
+                                    args.get("borough", ""),
+                                    args.get("hour", 0),
+                                    args.get("day_of_week", 0),
+                                )
+                                if (
+                                    result.startswith("⚠️")
+                                    or result.startswith("No prediction")
+                                    or result.startswith("Unknown borough")
+                                ):
+                                    answer = result
+                                    st.session_state.chat_messages.append({"role": "assistant", "content": answer})
+                                    with st.chat_message("assistant"):
+                                        st.markdown(answer)
+                                    st.stop()
+                            else:
+                                result = "Tool not found."
+
+                            tool_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": result,
+                            })
+
+                        follow_up = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[
+                                {"role": "system", "content": system_prompt},
+                                *st.session_state.chat_messages,
+                                {
+                                    "role": "assistant",
+                                    "content": message.content or "",
+                                    "tool_calls": message.tool_calls,
+                                },
+                                *tool_messages,
+                            ],
+                        )
+                        answer = follow_up.choices[0].message.content
+                    else:
+                        answer = message.content
+                except Exception as e:
+                    st.warning(f"GPT API error: {e} — falling back to local router.")
+                    answer = generate_response(user_prompt)
 
         with st.chat_message("assistant"):
             st.markdown(answer)
