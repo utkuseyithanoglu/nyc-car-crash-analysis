@@ -1,10 +1,21 @@
+from __future__ import annotations
+
 import os
 import re
 import json
 import pandas as pd
 import streamlit as st
-from streamlit_option_menu import option_menu
-from dotenv import load_dotenv
+
+try:
+    from streamlit_option_menu import option_menu
+except ImportError:
+    option_menu = None
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    def load_dotenv():
+        pass
 
 
 def detect_language(text: str) -> str:
@@ -91,32 +102,35 @@ st.set_page_config(
 st.title("NYC Car Crash Analysis Dashboard")
 st.markdown("Explore crash trends, injuries, borough hotspots, and risk patterns across New York City.")
 
-selected = option_menu(
-    menu_title=None,
-    options=["Dashboard", "AI Assistant"],
-    icons=["bar-chart", "chat-dots"],
-    orientation="horizontal",
-    styles={
-        "container": {
-            "padding": "6px",
-            "background-color": "#f1f3f6",
-            "border-radius": "12px"
-        },
-        "icon": {"color": "#2563eb", "font-size": "18px"},
-        "nav-link": {
-            "font-size": "16px",
-            "text-align": "center",
-            "font-weight": "600",
-            "color": "#333",
-            "border-radius": "10px",
-            "margin": "0 4px",
-        },
-        "nav-link-selected": {
-            "background-color": "#2563eb",
-            "color": "white",
-        },
-    }
-)
+if option_menu is not None:
+    selected = option_menu(
+        menu_title=None,
+        options=["Dashboard", "AI Assistant"],
+        icons=["bar-chart", "chat-dots"],
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "6px",
+                "background-color": "#f1f3f6",
+                "border-radius": "12px"
+            },
+            "icon": {"color": "#2563eb", "font-size": "18px"},
+            "nav-link": {
+                "font-size": "16px",
+                "text-align": "center",
+                "font-weight": "600",
+                "color": "#333",
+                "border-radius": "10px",
+                "margin": "0 4px",
+            },
+            "nav-link-selected": {
+                "background-color": "#2563eb",
+                "color": "white",
+            },
+        }
+    )
+else:
+    selected = st.radio("Navigation", ["Dashboard", "AI Assistant"], horizontal=True)
 
 # -----------------------------------
 # HELPERS
